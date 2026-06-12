@@ -11,7 +11,7 @@ import SwiftUI
 struct SpatialAgentApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            CameraView()
         }
     }
 }
