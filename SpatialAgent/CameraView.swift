@@ -8,11 +8,11 @@
 import SwiftUI
 
 struct CameraView: View {
-    @StateObject private var cameraManager = CameraManager()
+    @StateObject private var arManager = ARManager()
 
     var body: some View {
         ZStack {
-            cameraContent
+            ARViewContainer(arManager: arManager)
                 .ignoresSafeArea()
 
             VStack {
@@ -20,6 +20,7 @@ struct CameraView: View {
 
                 Button {
                     print("Camera button tapped")
+                    arManager.placeTestArrow()
                 } label: {
                     Circle()
                         .fill(.white)
@@ -36,30 +37,8 @@ struct CameraView: View {
             }
         }
         .background(.black)
-        .task {
-            cameraManager.requestCameraAccess()
-        }
         .onDisappear {
-            cameraManager.stopSession()
-        }
-    }
-
-    @ViewBuilder
-    private var cameraContent: some View {
-        switch cameraManager.authorizationState {
-        case .authorized:
-            CameraPreviewView(session: cameraManager.session)
-        case .notDetermined:
-            Color.black
-        case .denied:
-            Color.black
-                .overlay {
-                    Text("Camera access is required")
-                        .font(.headline)
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .padding()
-                }
+            arManager.pauseSession()
         }
     }
 }
