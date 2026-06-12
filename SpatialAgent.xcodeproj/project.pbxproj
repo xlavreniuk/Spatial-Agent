@@ -53,6 +53,7 @@
 				4F4A52162FDC28800028AB00 /* Sources */,
 				4F4A52172FDC28800028AB00 /* Frameworks */,
 				4F4A52182FDC28800028AB00 /* Resources */,
+				4F4A52282FDDDF000028AB00 /* Copy Local Environment */,
 			);
 			buildRules = (
 			);
@@ -105,6 +106,29 @@
 			);
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		4F4A52282FDDDF000028AB00 /* Copy Local Environment */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/.env",
+			);
+			name = "Copy Local Environment";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/.env",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ -f \"${SRCROOT}/.env\" ]; then\n  cp \"${SRCROOT}/.env\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/.env\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4F4A52162FDC28800028AB00 /* Sources */ = {
