@@ -7,7 +7,8 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		4F4A521A2FDC28800028AB00 /* SpatialAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpatialAgent.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4F4A521A2FDC28800028AB00 /* SpatialAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = SpatialAgent.app; path = "/Users/pc/Desktop/SpatialAgent/build/Debug-iphoneos/SpatialAgent.app"; sourceTree = "<absolute>"; };
+		4F4A526A2FDC84510028AB00 /* .env */ = {isa = PBXFileReference; lastKnownFileType = text; path = .env; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -32,13 +33,13 @@
 			children = (
 				4F4A521C2FDC28800028AB00 /* SpatialAgent */,
 				4F4A521B2FDC28800028AB00 /* Products */,
+				4F4A526A2FDC84510028AB00 /* .env */,
 			);
 			sourceTree = "<group>";
 		};
 		4F4A521B2FDC28800028AB00 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				4F4A521A2FDC28800028AB00 /* SpatialAgent.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -110,23 +111,20 @@
 /* Begin PBXShellScriptBuildPhase section */
 		4F4A52282FDDDF000028AB00 /* Copy Local Environment */ = {
 			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
 			inputPaths = (
 				"$(SRCROOT)/.env",
 			);
 			name = "Copy Local Environment";
-			outputFileListPaths = (
-			);
 			outputPaths = (
 				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/.env",
 			);
-			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ -f \"${SRCROOT}/.env\" ]; then\n  cp \"${SRCROOT}/.env\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/.env\"\nfi\n";
+			shellScript = (
+				"if [ -f \"${SRCROOT}/.env\" ]; then",
+				"  cp \"${SRCROOT}/.env\" \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/.env\"",
+				"fi",
+				"",
+			);
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -271,6 +269,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "SpatialAgent needs camera access to show a live preview.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SpatialAgent needs microphone access so you can ask repair questions.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SpatialAgent needs speech recognition to transcribe repair questions.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -304,6 +304,8 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "SpatialAgent needs camera access to show a live preview.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SpatialAgent needs microphone access so you can ask repair questions.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SpatialAgent needs speech recognition to transcribe repair questions.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

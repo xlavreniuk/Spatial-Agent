@@ -80,9 +80,114 @@ final class GeminiService {
         return rawResponse
     }
 
+    func generateRepairStep(
+        image: UIImage,
+        userRequest: String
+    ) async throws -> RepairStep {
+        try await generateRepairStep(
+            image: image,
+            userRequest: userRequest,
+            visionContext: VisionContext(objects: [])
+        )
+    }
+
+    func generateRepairStep(
+        image: UIImage,
+        userRequest: String,
+        visionContext: VisionContext
+    ) async throws -> RepairStep {
+        let prompt = try repairStepPrompt(
+            userRequest: userRequest,
+            visionContext: visionContext
+        )
+        let rawResponse = try await analyze(image: image, prompt: prompt)
+        let modelText = try extractModelText(from: rawResponse)
+        return try decodeRepairStep(from: modelText)
+    }
+
     private var endpointURL: URL {
         endpointBaseURL
             .appendingPathComponent(model + ":generateContent")
+    }
+
+    private func repairStepPrompt(
+        userRequest: String,
+        visionContext: VisionContext
+    ) throws -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+
+        let contextData = try encoder.encode(visionContext)
+        let contextJSON = String(data: contextData, encoding: .utf8) ?? #"{"objects":[]}"#
+        let allowedActions = RepairInstructionAction.allCases
+            .map(\.rawValue)
+            .joined(separator: ", ")
+
+        return """
+        You are an AR repair assistant. Inspect the image and decide what the user should do next.
+
+        User request:
+        \(userRequest)
+
+        Visible objects:
+        \(contextJSON)
+
+        Rules:
+        - Return only valid JSON.
+        - Do not wrap the JSON in Markdown.
+        - Do not return 3D coordinates.
+        - Use only these actions: \(allowedActions).
+        - Target values must match a visible object id when possible.
+        - If the requested object is not visible or the request does not match the image, return a WARNING instruction with target "scene".
+        - If the user asks how to open a water bottle and a bottle/cap is visible, use ROTATE_CCW or UNSCREW for the cap.
+        - If the task has multiple obvious physical steps, return multiple instructions in order.
+        - Keep "voice" short enough to show on a phone screen.
+
+        JSON schema:
+        {
+          "step": 1,
+          "voice": "Short spoken instruction.",
+          "instructions": [
+            {
+              "action": "CHECK",
+              "target": "object_id"
+            }
+          ]
+        }
+        """
+    }
+
+    private func extractModelText(from rawResponse: String) throws -> String {
+        let data = Data(rawResponse.utf8)
+        let response = try JSONDecoder().decode(GeminiGenerateContentResponse.self, from: data)
+
+        guard let text = response.candidates
+            .flatMap({ $0.content.parts })
+            .compactMap(\.text)
+            .first(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        else {
+            throw GeminiServiceError.missingModelText
+        }
+
+        return text
+    }
+
+    private func decodeRepairStep(from rawResponse: String) throws -> RepairStep {
+        let jsonString = extractJSONObject(from: rawResponse)
+        let data = Data(jsonString.utf8)
+        return try JSONDecoder().decode(RepairStep.self, from: data)
+    }
+
+    private func extractJSONObject(from text: String) -> String {
+        guard
+            let startIndex = text.firstIndex(of: "{"),
+            let endIndex = text.lastIndex(of: "}"),
+            startIndex <= endIndex
+        else {
+            return text
+        }
+
+        return String(text[startIndex...endIndex])
     }
 }
 
@@ -192,6 +297,7 @@ enum GeminiServiceError: LocalizedError {
     case missingAPIKey
     case imageEncodingFailed
     case invalidResponse
+    case missingModelText
     case requestFailed(statusCode: Int, body: String)
 
     var errorDescription: String? {
@@ -202,6 +308,8 @@ enum GeminiServiceError: LocalizedError {
             "Could not convert the image to JPEG data."
         case .invalidResponse:
             "Gemini returned a response that could not be interpreted."
+        case .missingModelText:
+            "Gemini returned no text content."
         case let .requestFailed(statusCode, body):
             "Gemini request failed with status \(statusCode): \(body)"
         }
@@ -234,4 +342,20 @@ private struct GeminiInlineData: Encodable {
         case mimeType = "mime_type"
         case data
     }
+}
+
+private struct GeminiGenerateContentResponse: Decodable {
+    let candidates: [GeminiCandidate]
+}
+
+private struct GeminiCandidate: Decodable {
+    let content: GeminiResponseContent
+}
+
+private struct GeminiResponseContent: Decodable {
+    let parts: [GeminiResponsePart]
+}
+
+private struct GeminiResponsePart: Decodable {
+    let text: String?
 }
