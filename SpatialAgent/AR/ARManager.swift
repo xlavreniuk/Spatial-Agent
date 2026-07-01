@@ -9,15 +9,28 @@ import ARKit
 import Combine
 import RealityKit
 import UIKit
+import Vision
 
-final class ARManager: ObservableObject {
+struct ObjectOverlay: Identifiable, Equatable {
+    let id: String
+    let label: String
+    let boundingBox: CGRect
+    let isTarget: Bool
+}
+
+final class ARManager: NSObject, ObservableObject {
+    @Published private(set) var objectOverlays: [ObjectOverlay] = []
+
     private weak var arView: ARView?
-    private var arrowEntity: Entity?
-    private var animationSubscription: (any Cancellable)?
+    private let trackingQueue = DispatchQueue(label: "spatialagent.object-tracking")
+    private let sequenceHandler = VNSequenceRequestHandler()
+    private var trackingRequests: [VNTrackObjectRequest] = []
+    private var isTrackingFrame = false
 
     func configure(_ arView: ARView) {
         self.arView = arView
         arView.automaticallyConfigureSession = false
+        arView.session.delegate = self
 
         let configuration = ARWorldTrackingConfiguration()
         configuration.worldAlignment = .gravity
@@ -26,44 +39,33 @@ final class ARManager: ObservableObject {
 
     func pauseSession() {
         arView?.session.pause()
-        animationSubscription?.cancel()
-        animationSubscription = nil
+        clearObjectOverlays()
     }
 
     func placeTestArrow() {
-        guard let placement = makePlacement(distance: 0.5) else { return }
-
-        arrowEntity?.removeFromParent()
-
-        let arrow = makeArrowEntity()
-        arrow.look(at: placement.cameraPosition, from: placement.position, relativeTo: nil)
-        placement.anchor.addChild(arrow)
-        placement.arView.scene.addAnchor(placement.anchor)
-
-        arrowEntity = arrow
-        startRotatingArrow()
+        showFallbackOverlay(label: "target")
     }
 
-    func placeInstructions(_ instructions: [RepairInstruction]) {
-        guard let primaryInstruction = instructions.first(where: { $0.action.shouldRenderArrow }) else {
+    func placeInstructions(_ instructions: [RepairInstruction], detectedObjects: [DetectedObject] = []) {
+        let targetIDs = Set(instructions.map(\.target))
+        let overlays = detectedObjects.compactMap { object -> ObjectOverlay? in
+            guard let boundingBox = object.boundingBox?.clampedCGRect else { return nil }
+
+            return ObjectOverlay(
+                id: object.id,
+                label: object.label,
+                boundingBox: boundingBox,
+                isTarget: targetIDs.contains(object.id)
+            )
+        }
+
+        if overlays.isEmpty {
+            showFallbackOverlay(label: fallbackLabel(for: instructions))
             return
         }
 
-        placeActionArrow(for: primaryInstruction.action)
-    }
-
-    private func placeActionArrow(for action: RepairInstructionAction) {
-        guard let placement = makePlacement(distance: 0.45) else { return }
-
-        arrowEntity?.removeFromParent()
-
-        let arrow = makeArrowEntity()
-        arrow.look(at: placement.cameraPosition, from: placement.position, relativeTo: nil)
-        placement.anchor.addChild(arrow)
-        placement.arView.scene.addAnchor(placement.anchor)
-
-        arrowEntity = arrow
-        startAnimation(for: action)
+        setObjectOverlays(overlays)
+        startTracking(overlays)
     }
 
     func currentCameraImage() -> UIImage? {
@@ -84,124 +86,141 @@ final class ARManager: ObservableObject {
         return UIImage(cgImage: cgImage)
     }
 
-    private func makePlacement(distance: Float) -> ArrowPlacement? {
-        guard let arView else { return nil }
+    private func setObjectOverlays(_ overlays: [ObjectOverlay]) {
+        DispatchQueue.main.async {
+            self.objectOverlays = overlays
+        }
+    }
 
-        let cameraTransform = arView.cameraTransform
-        let cameraPosition = cameraTransform.translation
-        let screenCenter = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
+    func clearObjectOverlays() {
+        setObjectOverlays([])
+        trackingQueue.async {
+            self.trackingRequests = []
+            self.isTrackingFrame = false
+        }
+    }
 
-        if let raycastResult = arView
-            .raycast(from: screenCenter, allowing: .estimatedPlane, alignment: .any)
-            .first
-        {
-            let position = raycastResult.worldTransform.translation
-            return ArrowPlacement(
-                arView: arView,
-                anchor: AnchorEntity(world: position),
-                position: position,
-                cameraPosition: cameraPosition
+    private func showFallbackOverlay(label: String) {
+        let overlay = ObjectOverlay(
+            id: "fallback-target",
+            label: label,
+            boundingBox: CGRect(x: 0.28, y: 0.32, width: 0.44, height: 0.28),
+            isTarget: true
+        )
+        setObjectOverlays([overlay])
+        trackingQueue.async {
+            self.trackingRequests = []
+        }
+    }
+
+    private func fallbackLabel(for instructions: [RepairInstruction]) -> String {
+        instructions
+            .first(where: { $0.target != "scene" })?
+            .target
+            .replacingOccurrences(of: "_", with: " ") ?? "target"
+    }
+
+    private func startTracking(_ overlays: [ObjectOverlay]) {
+        let requests = overlays.map { overlay in
+            let observation = VNDetectedObjectObservation(
+                boundingBox: overlay.boundingBox.visionBoundingBox
             )
+            let request = VNTrackObjectRequest(detectedObjectObservation: observation)
+            request.trackingLevel = .accurate
+            return request
         }
 
-        let forward = -cameraTransform.matrix.forwardVector
-        let position = cameraPosition + (forward * distance)
-        return ArrowPlacement(
-            arView: arView,
-            anchor: AnchorEntity(world: position),
-            position: position,
-            cameraPosition: cameraPosition
-        )
+        trackingQueue.async {
+            self.trackingRequests = requests
+        }
     }
+}
 
-    private func makeArrowEntity() -> Entity {
-        let arrow = Entity()
+extension ARManager: ARSessionDelegate {
+    func session(_ session: ARSession, didUpdate frame: ARFrame) {
+        trackingQueue.async {
+            guard !self.trackingRequests.isEmpty, !self.isTrackingFrame else { return }
 
-        let material = SimpleMaterial(color: .systemYellow, roughness: 0.35, isMetallic: false)
+            self.isTrackingFrame = true
+            defer { self.isTrackingFrame = false }
 
-        let shaft = ModelEntity(
-            mesh: .generateBox(size: [0.045, 0.045, 0.24]),
-            materials: [material]
-        )
-        shaft.position.z = -0.08
+            do {
+                try self.sequenceHandler.perform(
+                    self.trackingRequests,
+                    on: frame.capturedImage,
+                    orientation: .right
+                )
 
-        let head = ModelEntity(
-            mesh: .generateBox(size: [0.14, 0.14, 0.08]),
-            materials: [material]
-        )
-        head.position.z = -0.24
-        head.orientation = simd_quatf(angle: .pi / 4, axis: [0, 0, 1])
+                let trackedBoxes = self.trackingRequests.compactMap { request -> CGRect? in
+                    guard
+                        let observation = request.results?.first as? VNDetectedObjectObservation,
+                        observation.confidence >= 0.35
+                    else {
+                        return nil
+                    }
 
-        arrow.addChild(shaft)
-        arrow.addChild(head)
+                    return observation.boundingBox.displayBoundingBox
+                }
 
-        return arrow
-    }
+                guard !trackedBoxes.isEmpty else { return }
 
-    private func startRotatingArrow() {
-        startAnimation(for: .rotateCCW)
-    }
+                DispatchQueue.main.async {
+                    guard trackedBoxes.count == self.objectOverlays.count else { return }
 
-    private func startAnimation(for action: RepairInstructionAction) {
-        guard let arView else { return }
-
-        animationSubscription?.cancel()
-        animationSubscription = arView.scene.subscribe(to: SceneEvents.Update.self) { [weak self] event in
-            guard let arrowEntity = self?.arrowEntity else { return }
-
-            let deltaTime = Float(event.deltaTime)
-
-            switch action {
-            case .tighten, .rotateCW:
-                let rotation = simd_quatf(angle: deltaTime * 1.8, axis: [0, 1, 0])
-                arrowEntity.orientation = rotation * arrowEntity.orientation
-            case .unscrew, .rotateCCW:
-                let rotation = simd_quatf(angle: -deltaTime * 1.8, axis: [0, 1, 0])
-                arrowEntity.orientation = rotation * arrowEntity.orientation
-            case .pull, .push:
-                let direction: Float = action == .pull ? -1 : 1
-                let offset = sin(Float(CACurrentMediaTime()) * 4) * 0.05 * direction
-                arrowEntity.position.z = offset
-            case .lift, .lower:
-                let direction: Float = action == .lift ? 1 : -1
-                let offset = abs(sin(Float(CACurrentMediaTime()) * 4)) * 0.08 * direction
-                arrowEntity.position.y = offset
-            case .warning:
-                let scale = 1 + abs(sin(Float(CACurrentMediaTime()) * 5)) * 0.2
-                arrowEntity.scale = [scale, scale, scale]
-            default:
-                let rotation = simd_quatf(angle: deltaTime * 1.2, axis: [0, 1, 0])
-                arrowEntity.orientation = rotation * arrowEntity.orientation
+                    self.objectOverlays = zip(self.objectOverlays, trackedBoxes).map { overlay, box in
+                        ObjectOverlay(
+                            id: overlay.id,
+                            label: overlay.label,
+                            boundingBox: box,
+                            isTarget: overlay.isTarget
+                        )
+                    }
+                }
+            } catch {
+                print("Vision tracking error: \(error.localizedDescription)")
             }
         }
     }
 }
 
-private struct ArrowPlacement {
-    let arView: ARView
-    let anchor: AnchorEntity
-    let position: SIMD3<Float>
-    let cameraPosition: SIMD3<Float>
-}
+private extension NormalizedBoundingBox {
+    var clampedCGRect: CGRect {
+        let minX = x.clamped(to: 0...1)
+        let minY = y.clamped(to: 0...1)
+        let maxX = (x + width).clamped(to: 0...1)
+        let maxY = (y + height).clamped(to: 0...1)
 
-private extension RepairInstructionAction {
-    var shouldRenderArrow: Bool {
-        self != .warning && self != .complete && self != .check
+        return CGRect(
+            x: CGFloat(minX),
+            y: CGFloat(minY),
+            width: CGFloat(max(0.04, maxX - minX)),
+            height: CGFloat(max(0.04, maxY - minY))
+        )
     }
 }
 
-private extension Transform {
-    var translation: SIMD3<Float> {
-        matrix.translation
+private extension CGRect {
+    var visionBoundingBox: CGRect {
+        CGRect(
+            x: origin.x,
+            y: 1 - origin.y - height,
+            width: width,
+            height: height
+        )
+    }
+
+    var displayBoundingBox: CGRect {
+        CGRect(
+            x: origin.x,
+            y: 1 - origin.y - height,
+            width: width,
+            height: height
+        )
     }
 }
 
-private extension simd_float4x4 {
-    var translation: SIMD3<Float> {
-        SIMD3(columns.3.x, columns.3.y, columns.3.z)
-    }
-
-    var forwardVector: SIMD3<Float> {
-        SIMD3(columns.2.x, columns.2.y, columns.2.z)
+private extension Double {
+    func clamped(to range: ClosedRange<Double>) -> Double {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }

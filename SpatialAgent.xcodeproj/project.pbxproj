@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		4F4A521A2FDC28800028AB00 /* SpatialAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = SpatialAgent.app; path = "/Users/pc/Desktop/SpatialAgent/build/Debug-iphoneos/SpatialAgent.app"; sourceTree = "<absolute>"; };
+		4F2268112FE4154C008ED73C /* SpatialAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SpatialAgent.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4F4A526A2FDC84510028AB00 /* .env */ = {isa = PBXFileReference; lastKnownFileType = text; path = .env; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -40,6 +40,7 @@
 		4F4A521B2FDC28800028AB00 /* Products */ = {
 			isa = PBXGroup;
 			children = (
+				4F2268112FE4154C008ED73C /* SpatialAgent.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -63,7 +64,7 @@
 			);
 			name = SpatialAgent;
 			productName = SpatialAgent;
-			productReference = 4F4A521A2FDC28800028AB00 /* SpatialAgent.app */;
+			productReference = 4F2268112FE4154C008ED73C /* SpatialAgent.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

@@ -36,11 +36,26 @@ struct RepairStep: Codable, Equatable {
     let step: Int
     let voice: String
     let instructions: [RepairInstruction]
+    let objects: [DetectedObject]?
 }
 
 struct DetectedObject: Codable, Equatable {
     let id: String
     let label: String
+    let boundingBox: NormalizedBoundingBox?
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case label
+        case boundingBox = "bounding_box"
+    }
+}
+
+struct NormalizedBoundingBox: Codable, Equatable {
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
 }
 
 struct VisionContext: Codable, Equatable {

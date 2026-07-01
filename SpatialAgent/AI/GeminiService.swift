@@ -136,6 +136,8 @@ final class GeminiService {
         - Return only valid JSON.
         - Do not wrap the JSON in Markdown.
         - Do not return 3D coordinates.
+        - Identify the most relevant visible objects and return 2D bounding boxes for them.
+        - Bounding boxes must be normalized to the portrait image with x/y measured from the top-left corner and values between 0 and 1.
         - Use only these actions: \(allowedActions).
         - Target values must match a visible object id when possible.
         - If the requested object is not visible or the request does not match the image, return a WARNING instruction with target "scene".
@@ -147,6 +149,18 @@ final class GeminiService {
         {
           "step": 1,
           "voice": "Short spoken instruction.",
+          "objects": [
+            {
+              "id": "object_id",
+              "label": "object name",
+              "bounding_box": {
+                "x": 0.1,
+                "y": 0.2,
+                "width": 0.3,
+                "height": 0.4
+              }
+            }
+          ],
           "instructions": [
             {
               "action": "CHECK",
